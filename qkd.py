@@ -1,10 +1,11 @@
 # ---------------------------------------------------------
-# BB84 Quantum Key Distribution Simulation in Qiskit
+# BB84 Quantum Key Distribution Simulation in Qiskit 2.x
 # Works in VS Code or Jupyter Notebook
 # ---------------------------------------------------------
 
-from qiskit import QuantumCircuit, Aer, execute
-from qiskit.providers.aer.noise import NoiseModel, depolarizing_error
+from qiskit import QuantumCircuit
+from qiskit_aer import Aer
+from qiskit_aer.noise import NoiseModel, depolarizing_error
 import numpy as np
 import random
 import matplotlib.pyplot as plt
@@ -40,9 +41,13 @@ def measure_qubit(qc, basis):
     if basis == 'X':
         qc.h(0)
     qc.measure(0, 0)
-    backend = Aer.get_backend("qasm_simulator")
-    result = execute(qc, backend, shots=1).result()
-    return int(result.get_counts().most_common()[0][0])
+
+    backend = Aer.get_backend("aer_simulator")
+    job = backend.run(qc, shots=1)
+    result = job.result()
+    counts = result.get_counts()
+    measured_bit_str = max(counts, key=counts.get)  # most frequent outcome
+    return int(measured_bit_str)
 
 
 def eve_intercept(bit, basis, eve_prob):
@@ -69,9 +74,9 @@ def run_bb84(N=200, eve_prob=0, noise_model=None):
     """
     Run BB84 simulation.
     eve_prob: probability Eve intercepts each qubit
-    noise_model: Qiskit noise model
+    noise_model: Qiskit Aer noise model
     """
-    backend = Aer.get_backend("qasm_simulator")
+    backend = Aer.get_backend("aer_simulator")
 
     alice_bits = np.random.randint(2, size=N)
     alice_bases = np.random.choice(['Z', 'X'], size=N)
@@ -99,12 +104,14 @@ def run_bb84(N=200, eve_prob=0, noise_model=None):
         meas_qc.measure(0, 0)
 
         if noise_model:
-            job = execute(meas_qc, backend, shots=1, noise_model=noise_model)
+            job = backend.run(meas_qc, shots=1, noise_model=noise_model)
         else:
-            job = execute(meas_qc, backend, shots=1)
+            job = backend.run(meas_qc, shots=1)
 
         result = job.result()
-        measured_bit = int(result.get_counts().most_common()[0][0])
+        counts = result.get_counts()
+        measured_bit_str = max(counts, key=counts.get)
+        measured_bit = int(measured_bit_str)
         bob_results.append(measured_bit)
 
     # Sift key: keep only where bases match
@@ -113,8 +120,11 @@ def run_bb84(N=200, eve_prob=0, noise_model=None):
     sifted_bob = np.array(bob_results)[mask]
 
     # Compute QBER
-    errors = np.sum(sifted_alice != sifted_bob)
-    QBER = errors / len(sifted_alice) if len(sifted_alice) > 0 else 0
+    if len(sifted_alice) == 0:
+        QBER = 0
+    else:
+        errors = np.sum(sifted_alice != sifted_bob)
+        QBER = errors / len(sifted_alice)
 
     return QBER, len(sifted_alice)
 
@@ -126,9 +136,11 @@ def run_bb84(N=200, eve_prob=0, noise_model=None):
 def make_noise_model(p=0.05):
     """
     Simple depolarizing noise model for BB84.
+    Applies depolarizing noise to single-qubit gates we actually use (x, h).
     """
     noise_model = NoiseModel()
-    noise_model.add_all_qubit_quantum_error(depolarizing_error(p, 1), ['u3'])
+    error = depolarizing_error(p, 1)
+    noise_model.add_all_qubit_quantum_error(error, ['x', 'h'])
     return noise_model
 
 
@@ -144,7 +156,7 @@ def plot_eve_qber():
         QBER, _ = run_bb84(N=500, eve_prob=p)
         qbers.append(QBER)
 
-    plt.figure(figsize=(8,5))
+    plt.figure(figsize=(8, 5))
     plt.plot(eve_probs, qbers, marker='o')
     plt.xlabel("Eavesdropping Probability")
     plt.ylabel("QBER")
@@ -162,8 +174,8 @@ def plot_noise_qber():
         QBER, _ = run_bb84(N=500, eve_prob=0, noise_model=noise)
         qbers.append(QBER)
 
-    plt.figure(figsize=(8,5))
-    plt.plot(noise_vals, qbers, marker='o', color="red")
+    plt.figure(figsize=(8, 5))
+    plt.plot(noise_vals, qbers, marker='o')
     plt.xlabel("Noise Strength p")
     plt.ylabel("QBER")
     plt.title("QBER vs Channel Noise (Depolarizing)")
@@ -172,7 +184,7 @@ def plot_noise_qber():
 
 
 # ---------------------------------------------------------
-# Run All Experiments (Uncomment to use)
+# Run All Experiments
 # ---------------------------------------------------------
 
 if __name__ == "__main__":
@@ -192,4 +204,3 @@ if __name__ == "__main__":
     # Plots
     plot_eve_qber()
     plot_noise_qber()
-
