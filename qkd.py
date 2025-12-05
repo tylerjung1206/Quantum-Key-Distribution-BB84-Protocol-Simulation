@@ -1,8 +1,3 @@
-# ---------------------------------------------------------
-# BB84 Quantum Key Distribution Simulation in Qiskit 2.x
-# Works in VS Code or Jupyter Notebook
-# ---------------------------------------------------------
-
 from qiskit import QuantumCircuit
 from qiskit_aer import Aer
 from qiskit_aer.noise import NoiseModel, depolarizing_error
